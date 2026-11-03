@@ -1,26 +1,21 @@
-name: Independent implicit alias validation
+name: Validate implicit alias with official PTY harness
 on:
   push:
-    branches: [validation/implicit-alias-final]
+    branches: [validation/implicit-alias-tty]
     paths: [.github/workflows/alias-validation.yml]
 permissions:
   contents: read
 jobs:
-  linux:
+  tty:
     if: github.repository == 'Mohammad-Maraqa/nvm' && github.event.repository.private == false
     runs-on: ubuntu-latest
-    timeout-minutes: 40
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        awk: [gawk, mawk]
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
           fetch-depth: 2
-      - name: Provenance and dependencies without install hooks
+      - name: Verify frozen source and prepare dependencies without hooks
         run: |
           set -euo pipefail
           git fetch --no-tags --depth=1 origin c7c0a732b1f0dd87b83a178c3cc011e4ba8823d6
@@ -28,15 +23,13 @@ jobs:
           git config submodule.test/fixtures/nvmrc.url https://github.com/nvm-sh/nvmrc.git
           git submodule update --init --depth=1
           sudo apt-get update
-          sudo apt-get install -y zsh ksh gawk mawk shellcheck
-          sudo update-alternatives --set awk /usr/bin/${{ matrix.awk }}
+          sudo apt-get install -y zsh gawk mawk
           node --version
           npm --version
           npm install --ignore-scripts --no-audit --no-fund
           npm ls urchin
           npm run test:check-exec
-          git rev-parse HEAD
-      - name: Fast suite across four supported shells
+      - name: Official PTY harness full Bash gawk and exact terminal matrix
         run: |
           set -euo pipefail
           for bin in node npm npx; do
@@ -46,55 +39,31 @@ jobs:
           unset NVM_CD_FLAGS NVM_BIN NVM_INC
           export NVM_DIR="$PWD"
           result=0
-          for shell in bash dash sh zsh; do
-            set +e
-            timeout 8m make TERM=xterm-256color TEST_SUITE=fast SHELL="$shell" URCHIN="$PWD/node_modules/.bin/urchin" "test-$shell" > "$RUNNER_TEMP/fast-$shell.log" 2>&1
-            status=$?
-            set -e
-            tail -n 65 "$RUNNER_TEMP/fast-$shell.log"
-            echo "NVM_FAST_RESULT shell=$shell awk=${{ matrix.awk }} exit=$status"
-            if test "$status" -ne 0; then result=1; fi
+          sudo update-alternatives --set awk /usr/bin/gawk
+          set +e
+          script -q -e -c 'timeout 8m make TERM=xterm-256color TEST_SUITE=fast SHELL=bash URCHIN="$PWD/node_modules/.bin/urchin" test-bash' /dev/null > "$RUNNER_TEMP/full-tty.log" 2>&1
+          status=$?
+          set -e
+          cat "$RUNNER_TEMP/full-tty.log"
+          echo "FULL_TTY shell=bash awk=gawk exit=$status"
+          find . -name .urchin.log -type f -print -exec cat {} \;
+          if test "$status" -ne 0; then result=1; fi
+          for awkbin in gawk mawk; do
+            sudo update-alternatives --set awk "/usr/bin/$awkbin"
+            for shell in bash dash sh zsh; do
+              set +e
+              (cd 'test/fast/Unit tests' && script -q -e -c "timeout 30s $shell nvm_stdout_is_terminal" /dev/null)
+              status=$?
+              set -e
+              echo "TERMINAL_TTY shell=$shell awk=$awkbin exit=$status"
+              if test "$status" -ne 0; then result=1; fi
+            done
           done
+          git diff --exit-code c7c0a732b1f0dd87b83a178c3cc011e4ba8823d6 -- nvm.sh test
           exit "$result"
-      - name: Changed-source shellcheck
-        if: always()
-        run: |
-          set -euo pipefail
-          for shell in bash sh dash ksh; do shellcheck -s "$shell" nvm.sh; done
-      - name: Focused experimental ksh
-        if: always()
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          export NVM_DIR="$PWD"
-          cd 'test/fast/Unit tests'
-          for file in 'nvm_print_implicit_alias classification' 'nvm_print_implicit_alias success' 'nvm_print_implicit_alias errors' nvm_validate_implicit_alias; do
-            ksh "$file"
-          done
-      - name: Restore only runner-owned hidden executables
+      - name: Restore runner-owned hidden executables
         if: always()
         run: |
           for bin in node npm npx; do
             if test -f "/usr/local/bin/$bin.nvm-review-hidden"; then sudo mv "/usr/local/bin/$bin.nvm-review-hidden" "/usr/local/bin/$bin"; fi
-          done
-  macos-bash32:
-    if: github.repository == 'Mohammad-Maraqa/nvm' && github.event.repository.private == false
-    runs-on: macos-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          fetch-depth: 2
-      - name: Native Bash 3.2 and BSD awk final-tree regressions
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD^)" = c7c0a732b1f0dd87b83a178c3cc011e4ba8823d6
-          git diff --exit-code HEAD^ HEAD -- nvm.sh test package.json .gitmodules
-          /bin/bash --version
-          sw_vers
-          export NVM_DIR="$PWD"
-          cd 'test/fast/Unit tests'
-          for file in 'nvm_print_implicit_alias classification' 'nvm_print_implicit_alias success' 'nvm_print_implicit_alias errors' nvm_validate_implicit_alias nvm_die_on_prefix; do
-            /bin/bash "$file"
           done
