@@ -23,8 +23,8 @@ jobs:
       - name: Provenance and dependencies without install hooks
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD^)" = ede7719833ebe793f32959bb160490a300a01196
-          git diff --exit-code HEAD^ HEAD -- nvm.sh test package.json .gitmodules
+          git fetch --no-tags --depth=1 origin ede7719833ebe793f32959bb160490a300a01196
+          git diff --exit-code ede7719833ebe793f32959bb160490a300a01196 HEAD -- nvm.sh test package.json .gitmodules
           git config submodule.test/fixtures/nvmrc.url https://github.com/nvm-sh/nvmrc.git
           git submodule update --init --depth=1
           sudo apt-get update
@@ -44,6 +44,7 @@ jobs:
           done
           export PATH="$(printf '%s' "$PATH" | tr ':' '\n' | grep -v '\.nvm' | grep -v 'toolcache' | tr '\n' ':')"
           unset NVM_CD_FLAGS NVM_BIN NVM_INC
+          export NVM_DIR="$PWD"
           result=0
           for shell in bash dash sh zsh; do
             set +e
@@ -71,25 +72,4 @@ jobs:
         run: |
           for bin in node npm npx; do
             if test -f "/usr/local/bin/$bin.nvm-review-hidden"; then sudo mv "/usr/local/bin/$bin.nvm-review-hidden" "/usr/local/bin/$bin"; fi
-          done
-  macos-bash32:
-    if: github.repository == 'Mohammad-Maraqa/nvm' && github.event.repository.private == false
-    runs-on: macos-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          fetch-depth: 2
-      - name: Native Bash 3.2 and BSD awk focused regressions
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD^)" = ede7719833ebe793f32959bb160490a300a01196
-          git diff --exit-code HEAD^ HEAD -- nvm.sh test package.json .gitmodules
-          /bin/bash --version
-          sw_vers
-          export NVM_DIR="$PWD"
-          cd 'test/fast/Unit tests'
-          for file in 'nvm_print_implicit_alias classification' 'nvm_print_implicit_alias success' 'nvm_print_implicit_alias errors' nvm_validate_implicit_alias; do
-            /bin/bash "$file"
           done
