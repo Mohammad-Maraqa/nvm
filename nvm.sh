@@ -3295,7 +3295,9 @@ nvm_print_implicit_alias() {
   local STABLE
   local UNSTABLE
   local NVM_CLASSIFIED
-  NVM_CLASSIFIED=$(command awk -v requested="$2" '
+  NVM_CLASSIFIED=''
+  if [ -n "${LAST_TWO}" ]; then
+    NVM_CLASSIFIED=$(command awk -v requested="$2" '
     NF {
       split($0, parts, /\./);
       normalized = sprintf("%d%06d%06d", parts[1], parts[2], parts[3]);
@@ -3314,7 +3316,8 @@ nvm_print_implicit_alias() {
   ' <<EOF
 ${LAST_TWO}
 EOF
-  )
+    )
+  fi
   # Keep shell-local empty-input behavior, including inherited values in dash.
   if [ -n "${NVM_CLASSIFIED}" ]; then
     if [ "_$2" = '_stable' ]; then

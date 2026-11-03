@@ -47,3 +47,10 @@ RESULT=$(PATH="${COUNT_DIR}:${PATH}" nvm_print_implicit_alias local stable)
 [ "${RESULT}" = '1.5' ] || die 'latest minor classification'
 CALLS=$(wc -l < "${COUNT_DIR}/calls")
 [ "${CALLS}" -le 1 ] || die "classification launched ${CALLS} awk processes for six minors"
+
+VERSIONS=''
+: > "${COUNT_DIR}/calls"
+RESULT=$(PATH="${COUNT_DIR}:${PATH}" nvm_print_implicit_alias local unstable)
+[ "${RESULT}" = 'N/A' ] || die 'empty unstable classification'
+CALLS=$(wc -l < "${COUNT_DIR}/calls")
+[ "${CALLS}" -eq 0 ] || die "empty classification launched ${CALLS} awk processes"
